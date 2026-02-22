@@ -8,6 +8,7 @@ Mixxx DJ Buddy is a live analysis companion application for [Mixxx](https://mixx
 - **Always on Top:** Can be pinned on top of your mixing software so you never lose the visual reference.
 - **Customizable UI & Themes:** Supports themes (like Jazzy Light) and toggleable UI features directly from the settings menu.
 - **Dynamic Chart Generation:** Visualizes BPM trends and track metadata across your DJ set as you play.
+- **Interactive Tooltips:** Hover over or click data points to see which songs were played. The tooltips show which **crates** and **playlists** each song belongs to, and dynamically highlight any crates the song shares with the previously played track to help you understand your mixing flow.
 
 ## Screenshots
 
@@ -23,7 +24,7 @@ Mixxx DJ Buddy is a live analysis companion application for [Mixxx](https://mixx
 
 Watch a short screen recording demonstrating the app in action:
 
-[Watch the screen recording](./screenshots/screen_recording.mp4)
+[![Screen Recording Demo](./screenshots/screenshot_1.png)](./screenshots/screen_recording.mp4)
 
 ## Getting Started
 
