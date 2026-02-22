@@ -1,0 +1,1045 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Mixxx DJ Buddy</title>
+    <!-- Local Font CSS -->
+    <link rel="stylesheet" href="static/css/fonts.css" />
+    <!-- Google Font: Montserrat Alternates -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Montserrat+Alternates:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <!-- Local D3.js -->
+    <script src="static/js/d3.v7.min.js"></script>
+    <style>
+      :root {
+        --primary-color: #569cd6;
+        --overlay-color: #569cd6;
+        --bg-color: #1e1e1e;
+        --text-color: #d4d4d4; /* Default contrast fix */
+        --card-bg-color: #252526;
+        --tooltip-bg: #3c3c3c;
+        --tooltip-text: #d4d4d4;
+      }
+      body.theme-jazzy {
+        --primary-color: #ff006e; /* Jazzy pink */
+        --overlay-color: #3a86ff; /* Jazzy blue */
+        --bg-color: #f4f4f9; /* Playful bright background */
+        --text-color: #2b2d42; /* Dark jazzy text */
+        --card-bg-color: #ffffff;
+        --tooltip-bg: #eae2f8; /* Soft lavender */
+        --tooltip-text: #2b2d42;
+        --beat-stroke: #ff006e;
+        --beat-fill: #8338ec;
+      }
+      body {
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        margin: 0;
+        padding: 5px 10px 10px 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        /* Restamos 15px (padding) de la altura de la ventana */
+        height: calc(100vh - 15px);
+        box-sizing: border-box;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      h1 {
+        color: var(--primary-color);
+        margin-top: 0;
+        margin-bottom: 5px;
+      }
+
+      #chart-container {
+        width: 90%;
+        max-width: 1000px;
+        background-color: var(--card-bg-color);
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+        flex-grow: 1; /* Hace que el gráfico ocupe el espacio disponible */
+        display: flex; /* Permite que el SVG se expanda */
+      }
+
+      svg {
+        width: 100%;
+        height: 100%;
+      }
+
+      #status {
+        margin-top: 15px;
+        font-size: 0.9em;
+        color: #808080;
+      }
+
+      /* --- ¡NUEVO! Estilo para el Tooltip --- */
+      #tooltip {
+        position: absolute;
+        opacity: 0;
+        background-color: var(--tooltip-bg);
+        border: 1px solid var(--primary-color);
+        border-radius: 5px;
+        padding: 8px 12px;
+        color: var(--tooltip-text);
+        font-size: clamp(0.7em, 1.5vw, 0.95em);
+        pointer-events: none;
+        transition: opacity 0.2s;
+        white-space: nowrap;
+      }
+      /* --- ¡NUEVO! Estilo para el Toggle --- */
+      #controls {
+        width: 90%;
+        max-width: 1000px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+      .toggle-label {
+        margin-right: 10px;
+        font-size: 0.9em;
+      }
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 20px;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #3c3c3c;
+        transition: 0.4s;
+        border-radius: 20px;
+        border: 1px solid var(--primary-color);
+      }
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 2px;
+        bottom: 2px;
+        background-color: var(--primary-color);
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+      input:checked + .slider {
+        background-color: var(--primary-color);
+      }
+      input:checked + .slider:before {
+        transform: translateX(20px);
+        background-color: #1e1e1e;
+      }
+      /* --- ¡NUEVO! Settings Icon y Modal --- */
+      .icon-btn {
+        width: 24px;
+        height: 24px;
+        margin-left: 15px;
+        cursor: pointer;
+        stroke: var(--primary-color);
+        transition: transform 0.3s;
+      }
+      .icon-btn:hover {
+        transform: scale(1.1);
+      }
+      #settings-icon:hover {
+        transform: rotate(90deg);
+      }
+
+      body.maximized #controls {
+        display: none;
+      }
+      body.maximized {
+        padding: 0;
+        height: 100vh;
+      }
+      body.maximized #chart-container {
+        border-radius: 0;
+        padding: 10px;
+        box-shadow: none;
+      }
+      body.maximized #status {
+        display: none;
+      }
+
+      /* Floating Unmaximize Button */
+      #unmaximize-btn {
+        display: none;
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        background-color: var(--card-bg-color);
+        border: 1px solid var(--primary-color);
+        color: var(--primary-color);
+        border-radius: 5px;
+        padding: 5px 10px;
+        cursor: pointer;
+        z-index: 1000;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+        opacity: 0.3;
+        transition: opacity 0.3s;
+      }
+      #unmaximize-btn:hover {
+        opacity: 1;
+      }
+      body.maximized #unmaximize-btn {
+        display: block;
+      }
+
+      #settings-modal {
+        display: none;
+        position: absolute;
+        top: 60px;
+        right: 5%;
+        background-color: var(--card-bg-color);
+        border: 1px solid var(--primary-color);
+        border-radius: 8px;
+        padding: 20px;
+        z-index: 100;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+        color: var(--text-color);
+      }
+      .modal-header {
+        font-weight: bold;
+        margin-bottom: 15px;
+        color: var(--primary-color);
+      }
+      .radio-group {
+        margin-bottom: 10px;
+      }
+      .radio-group label {
+        display: block;
+        margin-bottom: 5px;
+        cursor: pointer;
+        font-size: 0.85em;
+      }
+      .radio-group input[type="radio"] {
+        margin-right: 6px;
+        accent-color: var(--primary-color);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="controls">
+      <h1 style="font-family: Irish Grover; margin: 0">Mixxx DJ Buddy</h1>
+      <div>
+        <svg
+          id="maximize-icon"
+          class="icon-btn"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          title="Maximize Plot"
+        >
+          <path
+            d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+          ></path>
+        </svg>
+        <svg
+          id="settings-icon"
+          class="icon-btn"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          <circle cx="12" cy="12" r="3"></circle>
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+          ></path>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" style="width: 260px">
+      <div class="modal-header">Settings & Customization</div>
+
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        "
+      >
+        <span class="toggle-label">X-Axis: Time</span>
+        <label class="switch">
+          <input type="checkbox" id="xAxisToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        "
+      >
+        <span class="toggle-label">Hide X-Axis</span>
+        <label class="switch">
+          <input type="checkbox" id="hideXAxisToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        "
+      >
+        <span class="toggle-label">Always on Top</span>
+        <label class="switch">
+          <input type="checkbox" id="alwaysOnTopToggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        "
+      >
+        <span class="toggle-label">Jazzy Theme (Light)</span>
+        <label class="switch">
+          <input type="checkbox" id="themeToggle" />
+          <span class="slider"></span>
+        </label>
+      </div>
+
+      <div class="radio-group">
+        <div class="modal-header" style="font-size: 0.9em; margin-bottom: 8px">
+          Tooltip Info
+        </div>
+        <label
+          ><input type="radio" name="tooltipMode" value="metadata" checked />
+          Metadata only</label
+        >
+        <label
+          ><input type="radio" name="tooltipMode" value="crates" /> Metadata +
+          Crates</label
+        >
+        <label
+          ><input type="radio" name="tooltipMode" value="playlists" /> Metadata
+          + Playlists</label
+        >
+      </div>
+    </div>
+
+    <div id="chart-container">
+      <svg
+        id="bpmChart"
+        xmlns="http://www.w3.org/2000/svg"
+        xmlns:xlink="http://www.w3.org/1999/xlink"
+      >
+        <g id="vinylGroup">
+          <g>
+            <path
+              d="M256,205.913c-27.619,0-50.087,22.468-50.087,50.087s22.468,50.087,50.087,50.087s50.087-22.468,50.087-50.087
+                S283.619,205.913,256,205.913z M256,272.696c-9.22,0-16.696-7.475-16.696-16.696c0-9.22,7.475-16.696,16.696-16.696
+                c9.22,0,16.696,7.475,16.696,16.696C272.696,265.22,265.22,272.696,256,272.696z"
+              fill="darkmagenta"
+            />
+          </g>
+          <g id="grooves">
+            <path
+              d="M256,0C114.837,0,0,114.843,0,256s114.837,256,256,256s256-114.843,256-256S397.163,0,256,0z
+                M149.75,362.25c6.521,6.516,6.521,17.087,0,23.609c-6.522,6.522-17.086,6.522-23.609,0C91.5,351.223,72.424,305.109,72.424,256
+                s19.076-95.223,53.718-129.859c6.521-6.521,17.087-6.521,23.609,0s6.521,17.092,0,23.609
+                c-28.326,28.331-43.935,66.065-43.935,106.25S121.424,333.919,149.75,362.25z M256,339.478c-46.032,0-83.478-37.446-83.478-83.478
+                s37.446-83.478,83.478-83.478s83.478,37.446,83.478,83.478S302.032,339.478,256,339.478z
+                M385.859,385.859c-6.522,6.522-17.086,6.522-23.609,0
+                c-6.521-6.521-6.521-17.092,0-23.609c28.326-28.331,43.935-66.065,43.935-106.25
+                s-15.608-77.919-43.935-106.25c-6.521-6.516-6.521-17.087,0-23.609
+                c6.521-6.521,17.087-6.521,23.609,0
+                c34.641,34.636,53.718,80.75,53.718,129.859S420.5,351.223,385.859,385.859z"
+              class="outer"
+            />
+          </g>
+        </g>
+        <defs>
+          <filter id="glow" x="-100%" y="0%" width="300%" height="300%">
+            <feGaussianBlur
+              in="SourceGraphic"
+              stdDeviation="25"
+              result="blur"
+            ></feGaussianBlur>
+
+            <feMerge>
+              <feMergeNode in="blur"></feMergeNode>
+              <feMergeNode in="SourceGraphic"></feMergeNode>
+            </feMerge>
+          </filter>
+        </defs>
+      </svg>
+    </div>
+    <p id="status">Connecting to server...</p>
+    <div id="tooltip"></div>
+    <div id="unmaximize-btn">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        style="vertical-align: middle"
+      >
+        <path
+          d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"
+        ></path>
+      </svg>
+    </div>
+
+    <script>
+      const statusEl = document.getElementById("status"); // --- Configuración del Gráfico D3 ---
+
+      // Settings modal toggling
+      const settingsIcon = document.getElementById("settings-icon");
+      const settingsModal = document.getElementById("settings-modal");
+      const maximizeIcon = document.getElementById("maximize-icon");
+
+      maximizeIcon.addEventListener("click", function (event) {
+        document.body.classList.add("maximized");
+        setTimeout(() => fetchData(), 50); // Redraw chart
+        saveSettings();
+      });
+
+      const unmaximizeBtn = document.getElementById("unmaximize-btn");
+      unmaximizeBtn.addEventListener("click", function (event) {
+        document.body.classList.remove("maximized");
+        setTimeout(() => fetchData(), 50); // Redraw chart
+        saveSettings();
+      });
+
+      settingsIcon.addEventListener("click", function (event) {
+        event.stopPropagation(); // Evitar que el click se propague al window
+        if (settingsModal.style.display === "block") {
+          settingsModal.style.display = "none";
+        } else {
+          settingsModal.style.display = "block";
+        }
+      });
+
+      // Close pinned tooltip on click outside dots
+      window.addEventListener("click", function (event) {
+        if (settingsModal.style.display === "block") {
+          if (
+            !settingsModal.contains(event.target) &&
+            event.target !== settingsIcon
+          ) {
+            settingsModal.style.display = "none";
+          }
+        }
+        // Unpin tooltip if clicking outside a dot
+        if (tooltipPinned && !event.target.closest(".dot")) {
+          tooltipPinned = false;
+          tooltip.transition().duration(300).style("opacity", 0);
+        }
+      });
+
+      // --- SETTINGS PERSISTENCE (localStorage) ---
+      function saveSettings() {
+        const settings = {
+          useTimeOnX,
+          hideXAxis,
+          tooltipMode,
+          jazzyTheme: document.body.classList.contains("theme-jazzy"),
+          alwaysOnTop: document.getElementById("alwaysOnTopToggle").checked,
+          maximized: document.body.classList.contains("maximized"),
+        };
+        localStorage.setItem("mixxxBuddySettings", JSON.stringify(settings));
+      }
+
+      function loadSettings() {
+        try {
+          const raw = localStorage.getItem("mixxxBuddySettings");
+          if (!raw) return;
+          const s = JSON.parse(raw);
+
+          // X-axis toggle
+          if (s.useTimeOnX !== undefined) {
+            useTimeOnX = s.useTimeOnX;
+            document.getElementById("xAxisToggle").checked = s.useTimeOnX;
+          }
+          // Hide X-axis toggle
+          if (s.hideXAxis !== undefined) {
+            hideXAxis = s.hideXAxis;
+            document.getElementById("hideXAxisToggle").checked = s.hideXAxis;
+          }
+          // Tooltip mode
+          if (s.tooltipMode) {
+            tooltipMode = s.tooltipMode;
+            const radio = document.querySelector(
+              `input[name="tooltipMode"][value="${s.tooltipMode}"]`,
+            );
+            if (radio) radio.checked = true;
+          }
+          // Theme
+          if (s.jazzyTheme) {
+            document.body.classList.add("theme-jazzy");
+            document.getElementById("themeToggle").checked = true;
+          }
+          // Always on top
+          if (s.alwaysOnTop !== undefined) {
+            document.getElementById("alwaysOnTopToggle").checked =
+              s.alwaysOnTop;
+            if (typeof setAlwaysOnTop === "function") {
+              setAlwaysOnTop(s.alwaysOnTop);
+            }
+          }
+          // Maximized
+          if (s.maximized) {
+            document.body.classList.add("maximized");
+          }
+        } catch (e) {
+          console.warn("Failed to load settings:", e);
+        }
+      }
+
+      // Tema de colores
+      document
+        .getElementById("themeToggle")
+        .addEventListener("change", function (e) {
+          if (e.target.checked) {
+            document.body.classList.add("theme-jazzy");
+          } else {
+            document.body.classList.remove("theme-jazzy");
+          }
+          saveSettings();
+        });
+
+      // Always on Top toggle
+      document
+        .getElementById("alwaysOnTopToggle")
+        .addEventListener("change", function (e) {
+          if (typeof setAlwaysOnTop === "function") {
+            setAlwaysOnTop(e.target.checked);
+          }
+          saveSettings();
+        });
+
+      const svg = d3.select("svg#bpmChart");
+      const chartContainer = document.getElementById("chart-container");
+      const tooltip = d3.select("#tooltip");
+
+      let chart, x, y, line, area;
+      let beat;
+      let cx_circle, cy_circle;
+      let vinylBaseScale = 0.1;
+      let responsiveFontSize = 13;
+      let responsiveBeatRadius = 25;
+      let useTimeOnX = false;
+      let hideXAxis = false;
+      let tooltipMode = "metadata";
+      let tooltipPinned = false;
+
+      // Listener para el toggle
+      document
+        .getElementById("xAxisToggle")
+        .addEventListener("change", function (e) {
+          useTimeOnX = e.target.checked;
+          saveSettings();
+          fetchData();
+        });
+
+      // Listener for Hide X-Axis
+      document
+        .getElementById("hideXAxisToggle")
+        .addEventListener("change", function (e) {
+          hideXAxis = e.target.checked;
+          saveSettings();
+          fetchData();
+        });
+
+      // Tooltip mode radio
+      document.querySelectorAll('input[name="tooltipMode"]').forEach((r) => {
+        r.addEventListener("change", function () {
+          tooltipMode = this.value;
+          saveSettings();
+        });
+      });
+
+      // Load saved settings on startup
+      loadSettings();
+
+      var track_number = {}; // para hacer cosas
+
+      // Función auxiliar para formatear segundos a MM:SS
+      function formatDuration(seconds) {
+        if (!seconds || isNaN(seconds)) return "00:00";
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.floor(seconds % 60);
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+      }
+
+      function initializeChart() {
+        // EVITA DUPLICACIÓN: Si el grupo principal ya existe, salimos.
+        if (d3.select("g.chart-group").node()) {
+          return;
+        }
+
+        const margin = { top: 20, right: 20, bottom: 30, left: 50 };
+        const width = chartContainer.clientWidth - margin.left - margin.right;
+        const height = chartContainer.clientHeight - margin.top - margin.bottom;
+        cx_circle = width / 2;
+        cy_circle = 4;
+
+        // Compute vinyl scale dynamically based on chart height
+        vinylBaseScale = Math.max(0.06, Math.min(0.18, height / 2500));
+        responsiveFontSize = Math.max(10, Math.min(16, width / 55));
+        responsiveBeatRadius = Math.max(15, Math.min(40, height / 10));
+        chart = svg
+          .append("g")
+          .attr("class", "chart-group") // Añadir clase para identificarlo
+          .attr("transform", `translate(${margin.left},${margin.top})`); // Definir escalas (rangos y dominios se actualizan en drawChart)
+        x = d3.scaleLinear();
+        y = d3.scaleLinear(); // Definir generadores de línea y área
+
+        // Definir generadores de línea y área vacíos (se instancian dinámica en drawChart)
+
+        // Crear Ejes y Paths
+        chart
+          .append("g")
+          .attr("class", "x-axis")
+          .style("stroke-width", "0.7px")
+          .style("stroke", "var(--primary-color)")
+          .style("fill", "var(--primary-color)")
+          .style("color", "var(--primary-color)")
+          .style("font-size", responsiveFontSize)
+          .style("font-family", "'Montserrat Alternates', Arial, sans-serif");
+        chart
+          .append("g")
+          .attr("class", "y-axis")
+          .style("stroke-width", "0.7px")
+          .style("stroke", "var(--primary-color)")
+          .style("fill", "var(--primary-color)")
+          .style("color", "var(--primary-color)")
+          .style("font-size", responsiveFontSize)
+          .style("font-family", "'Montserrat Alternates', Arial, sans-serif");
+        chart
+          .append("text")
+          .attr("x", -5)
+          .attr("y", -5)
+          .text("bpm")
+          .style("stroke", "var(--primary-color)");
+        chart
+          .append("path")
+          .attr("class", "bpm-area")
+          .style("fill", "var(--overlay-color)")
+          .style("opacity", 0.15);
+        chart
+          .append("path")
+          .attr("class", "bpm-line")
+          .attr("fill", "none")
+          .style("stroke", "var(--primary-color)")
+          .attr("stroke-width", 3)
+          .style("opacity", 0.4); // Inicialización del Vinilo (solo una vez)
+
+        const vinylGroup = d3.select("#vinylGroup");
+        const bbox = vinylGroup.node().getBBox();
+        const cx_vin = bbox.x + bbox.width / 2;
+        const cy_vin = bbox.y + bbox.height / 2;
+
+        vinylGroup
+          .attr(
+            "transform",
+            `translate(${cx_circle}, ${cy_circle}) scale(${vinylBaseScale}) rotate(0) translate(${-cx_vin}, ${-cy_vin})`,
+          )
+          .raise();
+
+        vinylGroup
+          .append("circle")
+          .attr("cx", cx_vin)
+          .attr("cy", cy_vin)
+          .attr("r", 3)
+          .attr("fill", "silver");
+
+        // --- rAF-BASED CONTINUOUS ANIMATION (replaces D3 transitions) ---
+        // This runs every frame and never needs to be interrupted/restarted.
+        let animStartTime = null;
+
+        function animateLoop(timestamp) {
+          if (!animStartTime) animStartTime = timestamp;
+          const elapsed = timestamp - animStartTime; // ms since animation started
+
+          // Read current BPM directly from latest data (no restart needed)
+          const currentData = svg.datum() || [];
+          const currentBPM =
+            currentData.length > 0
+              ? currentData[currentData.length - 1].bpm
+              : 120;
+
+          const beatPeriod_ms = (60 / currentBPM) * 1000;
+
+          // --- VINYL: rotation + pulse ---
+          // Rotation: 78 RPM = 360° per (60000/78) ms
+          const rotMs = 60000 / 78;
+          const angle = ((elapsed % rotMs) / rotMs) * 360;
+
+          // Pulse: sinusoidal scale at BPM frequency
+          const scaleMin = vinylBaseScale * 2.3;
+          const scaleMax = vinylBaseScale * 2.7;
+          const scaleRange = scaleMax - scaleMin;
+          const vinylSine =
+            (Math.sin((elapsed / beatPeriod_ms) * Math.PI * 2) + 1) / 2;
+          const vinylScale = scaleMin + vinylSine * scaleRange;
+
+          vinylGroup.attr(
+            "transform",
+            `translate(${cx_circle}, ${cy_circle}) scale(${vinylScale}) rotate(${angle}) translate(${-cx_vin}, ${-cy_vin})`,
+          );
+
+          // --- BEAT CIRCLE: pulse at BPM ---
+          if (beat) {
+            const beatSine =
+              (Math.sin((elapsed / beatPeriod_ms) * Math.PI * 2) + 1) / 2;
+            const beatScale = 0.9 + beatSine * 0.2; // 0.9 to 1.1
+            beat.attr(
+              "transform",
+              `translate(${cx_circle}, ${cy_circle}) scale(${beatScale})`,
+            );
+          }
+
+          requestAnimationFrame(animateLoop);
+        }
+
+        // Start the animation loop once
+        requestAnimationFrame(animateLoop);
+
+        beat = svg
+          .append("circle")
+          .attr("class", "frequency pulse-indicator")
+          .style("stroke", "var(--beat-stroke, white)")
+          .style("fill", "var(--beat-fill, coral)")
+          .attr("r", responsiveBeatRadius)
+          .style("filter", "url(#glow)")
+          .style("opacity", 1.0)
+          .attr("transform", `translate(${cx_circle}, ${cy_circle})`);
+
+        beat.lower();
+      }
+
+      function randomColour() {
+        return Math.floor(Math.random() * 256);
+      }
+      function randomAngle() {
+        return Math.floor(Math.random() * 360);
+      }
+
+      function drawChart(data) {
+        if (!data || data.length === 0) {
+          // Seleccionar el grupo principal (si existe) y remover sus hijos
+          svg.select("g.chart-group").selectAll(".dot").remove();
+          return;
+        } // Asegurarse de que el gráfico esté inicializado (solo crea los contenedores la primera vez)
+        if (!chart) initializeChart(); // --- RESPONSIVE UPDATE: Recalcular dimensiones y rangos ---
+        // AUMENTAR MARGEN DERECHO (right: 50) para evitar clipping del último punto.
+
+        // Calcular duraciones acumuladas si usamos tiempo
+        let cumulativeData = [];
+        let accTime = 0;
+        data.forEach((d) => {
+          cumulativeData.push({ ...d, accTime: accTime }); // El primer track inicia en 0
+          accTime += d.duration || 0; // Acumulamos para el siguiente
+        });
+
+        // When maximized, the container loses its padding, so we increase the internal D3 margin
+        // to prevent the last dot from getting clipped against the right ear of the screen.
+        const isMaximized = document.body.classList.contains("maximized");
+        const margin = {
+          top: 20,
+          right: isMaximized ? 40 : 20,
+          bottom: hideXAxis ? 15 : 55,
+          left: 40,
+        };
+        const width = chartContainer.clientWidth - margin.left - margin.right;
+        const height = chartContainer.clientHeight - margin.top - margin.bottom; // Recalcular posición central para vinilo/beat
+        cx_circle = width / 2; // Actualizar dominios y rangos de las escalas
+
+        // Recompute vinyl scale on resize
+        vinylBaseScale = Math.max(0.06, Math.min(0.18, height / 2500));
+        responsiveFontSize = Math.max(10, Math.min(16, width / 55));
+        responsiveBeatRadius = Math.max(15, Math.min(40, height / 10));
+
+        // Update font sizes dynamically
+        chart.select(".x-axis").style("font-size", responsiveFontSize);
+        chart.select(".y-axis").style("font-size", responsiveFontSize);
+
+        // Update beat radius dynamically
+        if (beat) beat.attr("r", responsiveBeatRadius);
+
+        if (useTimeOnX) {
+          // Domain ends at the last track's start time (not total accumulated time)
+          // This avoids a gap on the right since the last dot is at the last track's START
+          const lastAccTime =
+            cumulativeData.length > 0
+              ? cumulativeData[cumulativeData.length - 1].accTime
+              : 1;
+          const maxTime = lastAccTime > 0 ? lastAccTime : 1;
+          x.domain([0, maxTime]).range([0, width]);
+        } else {
+          x.domain([1, data.length]).range([0, width]);
+        }
+
+        const [minBpm, maxBpm] = d3.extent(data, (d) => d.bpm);
+        y.domain([minBpm - 5, maxBpm + 5]).range([height, 0]); // Actualizar generador de área con la nueva altura
+
+        area = d3
+          .area()
+          .x((d, i) => (useTimeOnX ? x(cumulativeData[i].accTime) : x(i + 1)))
+          .y1((d) => y(d.bpm))
+          .y0(height)
+          .curve(d3.curveMonotoneX);
+
+        line = d3
+          .line()
+          .x((d, i) => (useTimeOnX ? x(cumulativeData[i].accTime) : x(i + 1)))
+          .y((d) => y(d.bpm))
+          .curve(d3.curveMonotoneX);
+
+        // Smart responsive tick counts
+        const xTickCount = useTimeOnX
+          ? Math.max(3, Math.min(10, Math.floor(width / 100)))
+          : Math.max(3, Math.min(data.length, Math.floor(width / 60)));
+        const yTickCount = Math.max(3, Math.min(10, Math.floor(height / 40)));
+
+        let xAxisCall = d3.axisBottom(x);
+        if (useTimeOnX) {
+          xAxisCall.ticks(xTickCount).tickFormat((d) => formatDuration(d));
+        } else {
+          xAxisCall.ticks(xTickCount).tickFormat(d3.format("d"));
+        }
+
+        chart
+          .select(".x-axis")
+          .attr("transform", `translate(0,${height})`)
+          .style("display", hideXAxis ? "none" : null)
+          .transition()
+          .duration(300)
+          .call(xAxisCall)
+          .on("end", function () {
+            // Force text fill AFTER D3 renders the axis ticks to match theme
+            d3.select(this)
+              .selectAll("text")
+              .style("fill", "var(--primary-color)");
+            d3.select(this)
+              .selectAll("line, path")
+              .style("stroke", "var(--primary-color)");
+          });
+        chart
+          .select(".y-axis")
+          .transition()
+          .duration(300)
+          .call(d3.axisLeft(y).ticks(yTickCount));
+
+        chart
+          .select(".bpm-line")
+          .datum(data)
+          .transition()
+          .duration(300)
+          .attr("d", line);
+        chart
+          .select(".bpm-area")
+          .datum(data)
+          .transition()
+          .duration(300)
+          .attr("d", area); // --- UPDATE VINYL/BEAT POSITION ---
+
+        const vinylGroup = d3.select("#vinylGroup");
+        const bbox = vinylGroup.node().getBBox();
+        const cx_vin = bbox.x + bbox.width / 2;
+        const cy_vin = bbox.y + bbox.height / 2; // Resetear la posición base para que spinScale use el nuevo cx_circle/cy_circle
+        vinylGroup.attr(
+          "transform",
+          `translate(${cx_circle}, ${cy_circle}) scale(${vinylBaseScale}) rotate(0) translate(${-cx_vin}, ${-cy_vin})`,
+        );
+        beat.attr("transform", `translate(${cx_circle}, ${cy_circle})`); // **Attach a fixed random rotation property to the data object if it doesn't exist**
+
+        data.forEach((d, i) => {
+          if (d.randomRotation === undefined) {
+            d.randomRotation = randomAngle();
+          }
+          d._idx = i; // Store index for tooltip crate highlighting
+        }); // Unir datos a los círculos (dots)
+
+        const dots = chart.selectAll(".dot").data(data); // Salir (eliminar puntos viejos)
+
+        dots.exit().remove(); // Entrar (crear nuevos puntos)
+
+        dots
+          .enter()
+          .append("ellipse")
+          .attr("class", "dot")
+          .attr("rx", Math.max(4, Math.min(7, width / 120)))
+          .attr("ry", Math.max(5, Math.min(10, height / 40)))
+          .attr("cx", 0)
+          .attr("cy", 0)
+          .style("fill", (d, i) => {
+            const randomValue = randomColour();
+            const randomValue2 = randomColour();
+            const randomValue3 = randomColour();
+            return `rgb(${89 + randomValue3 / 4}, ${89 + randomValue2 / 4}, ${randomValue})`;
+          })
+          .style("opacity", 0.9)
+          .on("mouseover", (event, d) => {
+            if (!tooltipPinned) {
+              tooltip.transition().duration(200).style("opacity", 0.9);
+            }
+          })
+          .on("mousemove", (event, d) => {
+            if (tooltipPinned) return; // Don't update if pinned
+            const durText = d.duration
+              ? `<br/>${formatDuration(d.duration)}`
+              : "";
+
+            let extraHtml = "";
+
+            if (tooltipMode === "crates" && d.crates) {
+              const currentCrates = d.crates.split(", ").map((c) => c.trim());
+              const idx = d._idx !== undefined ? d._idx : -1;
+              const prevCrates =
+                idx > 0 && data[idx - 1] && data[idx - 1].crates
+                  ? data[idx - 1].crates.split(", ").map((c) => c.trim())
+                  : [];
+
+              const crateItemsList = currentCrates.map((c) => ({
+                name: c,
+                isShared: prevCrates.includes(c),
+              }));
+
+              // Sort shared crates first, maintaining default order otherwise
+              crateItemsList.sort((a, b) => {
+                if (a.isShared && !b.isShared) return -1;
+                if (!a.isShared && b.isShared) return 1;
+                return 0;
+              });
+
+              const crateItems = crateItemsList
+                .map((item) => {
+                  return item.isShared
+                    ? `<span style="font-weight:bold;">🔗 ${item.name}</span>`
+                    : `<span style="opacity:0.7;">📦 ${item.name}</span>`;
+                })
+                .join("<br/>");
+              extraHtml = `<br/>${crateItems}`;
+            } else if (tooltipMode === "playlists" && d.playlists) {
+              const playlistItems = d.playlists
+                .split(", ")
+                .map((p) => `<span style="opacity:0.7;">🎵 ${p.trim()}</span>`)
+                .join("<br/>");
+              extraHtml = `<br/>${playlistItems}`;
+            }
+
+            tooltip.html(
+              `<strong>${d.artist}</strong><br/>${d.title}<br/>${d.bpm.toFixed(0)} BPM${durText}${extraHtml}`,
+            );
+
+            // Smart positioning: flip to left if tooltip would overflow right edge
+            const tooltipNode = tooltip.node();
+            const tooltipWidth = tooltipNode.offsetWidth || 200;
+            const windowWidth = window.innerWidth;
+            let leftPos = event.pageX + 15;
+            if (leftPos + tooltipWidth > windowWidth - 10) {
+              leftPos = event.pageX - tooltipWidth - 15;
+            }
+
+            tooltip
+              .style("left", leftPos + "px")
+              .style("top", event.pageY - 28 + "px");
+          })
+          .on("mouseout", (d) => {
+            if (!tooltipPinned) {
+              tooltip.transition().duration(500).style("opacity", 0);
+            }
+          })
+          .on("click", (event, d) => {
+            event.stopPropagation();
+            tooltipPinned = true;
+            tooltip.transition().duration(100).style("opacity", 0.95);
+          }) // Fusionar (merge) y actualizar puntos existentes
+          .merge(dots)
+          .transition()
+          .duration(300)
+          .attr("rx", Math.max(4, Math.min(7, width / 120)))
+          .attr("ry", Math.max(5, Math.min(10, height / 40)))
+          .attr("transform", (d, i) => {
+            const tx = useTimeOnX ? x(cumulativeData[i].accTime) : x(i + 1);
+            const ty = y(d.bpm); // Translate to position (tx, ty), then rotate by the fixed random angle
+            return `translate(${tx}, ${ty}) rotate(${d.randomRotation})`;
+          });
+      }
+
+      async function fetchData() {
+        try {
+          // Evitar caché
+          const response = await fetch("/api/data?t=" + new Date().getTime());
+          if (!response.ok) {
+            throw new Error("Network error: " + response.statusText);
+          }
+          const data = await response.json();
+
+          // CRITICAL: Store the latest data on the SVG element
+          svg.datum(data);
+
+          drawChart(data);
+          // Animation is handled by the rAF loop — no pulseIt needed
+
+          statusEl.textContent =
+            "Updated: " +
+            new Date().toLocaleTimeString() +
+            ". " +
+            data.length +
+            " tracks in current session.";
+        } catch (err) {
+          console.error("Error fetching data:", err);
+          statusEl.textContent = "Error connecting to server. Is it running?";
+        }
+      } // --- Controladores de Eventos ---
+      // Redibujar el gráfico si la ventana cambia de tamaño
+
+      window.addEventListener("resize", () => {
+        fetchData();
+      });
+
+      initializeChart(); // Dibuja el gráfico vacío al inicio (crea contenedores y arranca spinScale)
+      setInterval(fetchData, 300); // Actualiza datos del gráfico y pulso del beat
+      fetchData(); // Llama inmediatamente al cargar
+    </script>
+  </body>
+</html>
