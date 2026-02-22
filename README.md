@@ -21,12 +21,9 @@ Mixxx DJ Buddy is a live analysis companion application for [Mixxx](https://mixx
 
 ## Demo
 
-Here is a short screen recording demonstrating the app in action:
+Watch a short screen recording demonstrating the app in action:
 
-<video width="800" controls>
-  <source src="./screenshots/screen_recording.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+[Watch the screen recording](./screenshots/screen_recording.mp4)
 
 ## Getting Started
 
