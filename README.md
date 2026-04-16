@@ -30,7 +30,7 @@ Watch a short screen recording demonstrating the app in action:
 
 ### Prerequisites
 
-- Go 1.25.3 or later
+- Go 1.21–1.24 (Go 1.25+ is not yet supported due to pre-built CGO wheel availability for `webview_go`)
 - [Mixxx](https://mixxx.org/) installed and running on your system (the app automatically locates the default `mixxxdb.sqlite` location based on your OS)
 
 ### Installation & Build
