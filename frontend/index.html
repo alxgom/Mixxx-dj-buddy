@@ -60,16 +60,80 @@
         margin-bottom: 5px;
       }
 
-      #chart-container {
+      #content-area {
         width: 90%;
         max-width: 1000px;
+        display: flex;
+        flex-direction: column;
+        flex-grow: 1;
+        gap: 15px;
+        overflow: hidden;
+      }
+      @media (min-width: 800px) {
+        #content-area {
+          flex-direction: row;
+        }
+      }
+
+      .card {
         background-color: var(--card-bg-color);
-        padding: 20px;
         border-radius: 8px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
-        flex-grow: 1; /* Hace que el gráfico ocupe el espacio disponible */
-        display: flex; /* Permite que el SVG se expanda */
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        position: relative;
+        overflow: hidden;
       }
+
+      .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 15px 0 15px;
+        font-weight: bold;
+        color: var(--primary-color);
+      }
+
+      #chart-container {
+        padding-bottom: 20px;
+      }
+      #list-container {
+        padding-bottom: 5px;
+      }
+      
+      #track-list-content {
+        flex-grow: 1;
+        overflow-y: auto;
+        padding: 10px 15px;
+        font-size: 0.9em;
+        /* Custom scrollbar to match theme */
+        scrollbar-color: var(--primary-color) var(--card-bg-color);
+        scrollbar-width: thin;
+      }
+      .track-item {
+        padding: 8px 0;
+        border-bottom: 1px solid rgba(128, 128, 128, 0.2);
+        display: flex;
+        justify-content: space-between;
+      }
+      .track-item:last-child {
+        border-bottom: none;
+      }
+      .track-item.current {
+        font-weight: bold;
+        color: var(--primary-color);
+      }
+      .track-time {
+        opacity: 0.6;
+        font-size: 0.85em;
+        min-width: 45px;
+        text-align: right;
+      }
+
+      /* Layout visibility overrides */
+      body.layout-chart #list-container { display: none; }
+      body.layout-list #chart-container { display: none; }
 
       svg {
         width: 100%;
@@ -173,9 +237,14 @@
         padding: 0;
         height: 100vh;
       }
-      body.maximized #chart-container {
-        border-radius: 0;
+      body.maximized #content-area {
+        width: 100%;
+        max-width: none;
+        gap: 10px;
         padding: 10px;
+      }
+      body.maximized .card {
+        border-radius: 0;
         box-shadow: none;
       }
       body.maximized #status {
@@ -187,7 +256,7 @@
         display: none;
         position: absolute;
         top: 15px;
-        right: 15px;
+        left: 15px;
         background-color: var(--card-bg-color);
         border: 1px solid var(--primary-color);
         color: var(--primary-color);
@@ -340,6 +409,21 @@
         </label>
       </div>
 
+      <div
+        style="
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 10px;
+        "
+      >
+        <span class="toggle-label">Vinyl Animation</span>
+        <label class="switch">
+          <input type="checkbox" id="vinylToggle" checked />
+          <span class="slider"></span>
+        </label>
+      </div>
+
       <div class="radio-group">
         <div class="modal-header" style="font-size: 0.9em; margin-bottom: 8px">
           Tooltip Info
@@ -357,9 +441,23 @@
           + Playlists</label
         >
       </div>
+
+      <div class="radio-group" style="padding-top:10px; border-top: 1px solid var(--primary-color);">
+        <div class="modal-header" style="font-size: 0.9em; margin-bottom: 8px">
+          Tooltip Text Size
+        </div>
+        <label><input type="radio" name="tooltipFontSize" value="small" /> Small</label>
+        <label><input type="radio" name="tooltipFontSize" value="medium" checked /> Medium</label>
+        <label><input type="radio" name="tooltipFontSize" value="large" /> Large</label>
+      </div>
     </div>
 
-    <div id="chart-container">
+    <div id="content-area">
+      <div id="chart-container" class="card">
+        <div class="card-header">
+          <span>BPM Plot</span>
+          <svg class="icon-btn focus-chart-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="margin:0;"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        </div>
       <svg
         id="bpmChart"
         xmlns="http://www.w3.org/2000/svg"
@@ -405,6 +503,14 @@
           </filter>
         </defs>
       </svg>
+      </div>
+      <div id="list-container" class="card">
+        <div class="card-header">
+          <span>Track History</span>
+          <svg class="icon-btn focus-list-btn" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18" style="margin:0;"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path></svg>
+        </div>
+        <div id="track-list-content"></div>
+      </div>
     </div>
     <p id="status">Connecting to server...</p>
     <div id="tooltip"></div>
@@ -447,6 +553,22 @@
         saveSettings();
       });
 
+      // Track layout events:
+      document.addEventListener("click", function(e) {
+        const chartBtn = e.target.closest(".focus-chart-btn");
+        const listBtn = e.target.closest(".focus-list-btn");
+        
+        if (chartBtn) {
+           layoutMode = layoutMode === "chart" ? "split" : "chart";
+           saveSettings();
+           updateLayoutMode();
+        } else if (listBtn) {
+           layoutMode = layoutMode === "list" ? "split" : "list";
+           saveSettings();
+           updateLayoutMode();
+        }
+      });
+
       settingsIcon.addEventListener("click", function (event) {
         event.stopPropagation(); // Evitar que el click se propague al window
         if (settingsModal.style.display === "block") {
@@ -479,6 +601,9 @@
           useTimeOnX,
           hideXAxis,
           tooltipMode,
+          tooltipFontSize,
+          layoutMode,
+          showVinyl,
           jazzyTheme: document.body.classList.contains("theme-jazzy"),
           alwaysOnTop: document.getElementById("alwaysOnTopToggle").checked,
           maximized: document.body.classList.contains("maximized"),
@@ -510,6 +635,20 @@
             );
             if (radio) radio.checked = true;
           }
+          // Tooltip font size
+          if (s.tooltipFontSize) {
+            tooltipFontSize = s.tooltipFontSize;
+            const radio = document.querySelector(
+              `input[name="tooltipFontSize"][value="${s.tooltipFontSize}"]`,
+            );
+            if (radio) radio.checked = true;
+            updateTooltipFont();
+          }
+          // Layout mode
+          if (s.layoutMode) {
+            layoutMode = s.layoutMode;
+            updateLayoutMode();
+          }
           // Theme
           if (s.jazzyTheme) {
             document.body.classList.add("theme-jazzy");
@@ -517,11 +656,16 @@
           }
           // Always on top
           if (s.alwaysOnTop !== undefined) {
-            document.getElementById("alwaysOnTopToggle").checked =
-              s.alwaysOnTop;
+            document.getElementById("alwaysOnTopToggle").checked = s.alwaysOnTop;
             if (typeof setAlwaysOnTop === "function") {
               setAlwaysOnTop(s.alwaysOnTop);
             }
+          }
+          // Vinyl
+          if (s.showVinyl !== undefined) {
+            showVinyl = s.showVinyl;
+            document.getElementById("vinylToggle").checked = s.showVinyl;
+            updateVinylVisibility();
           }
           // Maximized
           if (s.maximized) {
@@ -541,6 +685,15 @@
           } else {
             document.body.classList.remove("theme-jazzy");
           }
+          saveSettings();
+        });
+
+      // Vinyl toggle
+      document
+        .getElementById("vinylToggle")
+        .addEventListener("change", function (e) {
+          showVinyl = e.target.checked;
+          updateVinylVisibility();
           saveSettings();
         });
 
@@ -568,6 +721,45 @@
       let hideXAxis = false;
       let tooltipMode = "metadata";
       let tooltipPinned = false;
+      let tooltipFontSize = "medium";
+      let layoutMode = "split";
+      let showVinyl = true;
+
+      function updateVinylVisibility() {
+        const vinylGroup = d3.select("#vinylGroup");
+        const beatEl = d3.select(".pulse-indicator");
+        const opacity = showVinyl ? null : "0";
+        if (vinylGroup.node()) vinylGroup.style("opacity", opacity ? opacity : null);
+        if (beatEl.node()) beatEl.style("opacity", showVinyl ? "1" : "0");
+      }
+
+      function updateLayoutMode() {
+        document.body.classList.remove("layout-chart", "layout-list", "layout-split");
+        document.body.classList.add("layout-" + layoutMode);
+        
+        const chartPath = layoutMode === "chart" 
+          ? "M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" 
+          : "M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3";
+          
+        const listPath = layoutMode === "list" 
+          ? "M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3" 
+          : "M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3";
+
+        const cBtn = document.querySelector(".focus-chart-btn path");
+        const lBtn = document.querySelector(".focus-list-btn path");
+        if (cBtn) cBtn.setAttribute("d", chartPath);
+        if (lBtn) lBtn.setAttribute("d", listPath);
+
+        setTimeout(() => { if (typeof fetchData === 'function') fetchData() }, 50);
+      }
+
+
+      function updateTooltipFont() {
+        const t = document.getElementById("tooltip");
+        if (tooltipFontSize === "small") t.style.fontSize = "clamp(0.55em, 1.2vw, 0.75em)";
+        else if (tooltipFontSize === "medium") t.style.fontSize = "clamp(0.7em, 1.5vw, 0.95em)";
+        else if (tooltipFontSize === "large") t.style.fontSize = "clamp(0.95em, 2vw, 1.25em)";
+      }
 
       // Listener para el toggle
       document
@@ -591,6 +783,15 @@
       document.querySelectorAll('input[name="tooltipMode"]').forEach((r) => {
         r.addEventListener("change", function () {
           tooltipMode = this.value;
+          saveSettings();
+        });
+      });
+
+      // Tooltip font size radio
+      document.querySelectorAll('input[name="tooltipFontSize"]').forEach((r) => {
+        r.addEventListener("change", function () {
+          tooltipFontSize = this.value;
+          updateTooltipFont();
           saveSettings();
         });
       });
@@ -620,8 +821,10 @@
         cx_circle = width / 2;
         cy_circle = 4;
 
-        // Compute vinyl scale dynamically based on chart height
-        vinylBaseScale = Math.max(0.06, Math.min(0.18, height / 2500));
+        // Vinyl scale: cap at ~20% of chart height so it never dominates small windows
+        // The vinyl SVG is 512px; displayed radius = vinylBaseScale * 2.5 * 256
+        // Target max displayed radius = 0.20 * height  →  vinylBaseScale = height / (0.20 * 512 * 2.5)
+        vinylBaseScale = Math.max(0.03, Math.min(0.12, height / 3000));
         responsiveFontSize = Math.max(10, Math.min(16, width / 55));
         responsiveBeatRadius = Math.max(15, Math.min(40, height / 10));
         chart = svg
@@ -734,7 +937,10 @@
               "transform",
               `translate(${cx_circle}, ${cy_circle}) scale(${beatScale})`,
             );
+            beat.style("opacity", showVinyl ? "1" : "0");
           }
+
+          vinylGroup.style("opacity", showVinyl ? null : "0");
 
           requestAnimationFrame(animateLoop);
         }
@@ -788,14 +994,14 @@
           bottom: hideXAxis ? 15 : 55,
           left: 40,
         };
-        const width = chartContainer.clientWidth - margin.left - margin.right;
-        const height = chartContainer.clientHeight - margin.top - margin.bottom; // Recalcular posición central para vinilo/beat
+        const width = Math.max(1, chartContainer.clientWidth - margin.left - margin.right);
+        const height = Math.max(1, chartContainer.clientHeight - margin.top - margin.bottom); // Recalcular posición central para vinilo/beat
         cx_circle = width / 2; // Actualizar dominios y rangos de las escalas
 
-        // Recompute vinyl scale on resize
-        vinylBaseScale = Math.max(0.06, Math.min(0.18, height / 2500));
+        // Recompute vinyl scale on resize — keep it proportional to chart height
+        vinylBaseScale = Math.max(0.03, Math.min(0.12, height / 3000));
         responsiveFontSize = Math.max(10, Math.min(16, width / 55));
-        responsiveBeatRadius = Math.max(15, Math.min(40, height / 10));
+        responsiveBeatRadius = Math.max(10, Math.min(35, height / 12));
 
         // Update font sizes dynamically
         chart.select(".x-axis").style("font-size", responsiveFontSize);
@@ -970,18 +1176,27 @@
               `<strong>${d.artist}</strong><br/>${d.title}<br/>${d.bpm.toFixed(0)} BPM${durText}${extraHtml}`,
             );
 
-            // Smart positioning: flip to left if tooltip would overflow right edge
+            // Smart positioning: flip to left/top if tooltip would overflow window edges
             const tooltipNode = tooltip.node();
             const tooltipWidth = tooltipNode.offsetWidth || 200;
+            const tooltipHeight = tooltipNode.offsetHeight || 80;
             const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+
             let leftPos = event.pageX + 15;
             if (leftPos + tooltipWidth > windowWidth - 10) {
               leftPos = event.pageX - tooltipWidth - 15;
             }
 
+            let topPos = event.pageY - 28;
+            // If tooltip expands below the bottom of the screen, flip it above the cursor
+            if (topPos + tooltipHeight > windowHeight - 10) {
+              topPos = event.pageY - tooltipHeight - 10;
+            }
+
             tooltip
               .style("left", leftPos + "px")
-              .style("top", event.pageY - 28 + "px");
+              .style("top", topPos + "px");
           })
           .on("mouseout", (d) => {
             if (!tooltipPinned) {
@@ -1018,6 +1233,7 @@
           svg.datum(data);
 
           drawChart(data);
+          updateTrackList(data);
           // Animation is handled by the rAF loop — no pulseIt needed
 
           statusEl.textContent =
@@ -1030,7 +1246,39 @@
           console.error("Error fetching data:", err);
           statusEl.textContent = "Error connecting to server. Is it running?";
         }
-      } // --- Controladores de Eventos ---
+      }
+
+      function updateTrackList(data) {
+        const listDiv = document.getElementById("track-list-content");
+        if (!listDiv) return;
+        if (!data || data.length === 0) {
+          listDiv.innerHTML = "<div style='opacity:0.5; padding:10px;'>No tracks played yet...</div>";
+          return;
+        }
+        
+        let html = "";
+        data.forEach((d, i) => {
+          const isCurrent = i === data.length - 1;
+          const displayBPM = d.bpm.toFixed(0);
+          const titleClean = d.title || "Unknown Title";
+          const artistClean = d.artist || "Unknown Artist";
+          
+          html += `<div class="track-item ${isCurrent ? 'current' : ''}">
+            <div>
+               ${isCurrent ? '<span style="font-size:1.1em; display:inline-block; margin-right:5px;">▶</span>' : ''}
+               <strong>${artistClean}</strong> - ${titleClean} <span style="opacity:0.6; font-size:0.85em; margin-left:5px;">${displayBPM} BPM</span>
+            </div>
+            <div class="track-time">${formatDuration(d.duration)}</div>
+          </div>`;
+        });
+        
+        if (listDiv.innerHTML !== html) {
+          listDiv.innerHTML = html;
+          listDiv.scrollTop = listDiv.scrollHeight;
+        }
+      }
+      
+      // --- Controladores de Eventos ---
       // Redibujar el gráfico si la ventana cambia de tamaño
 
       window.addEventListener("resize", () => {
@@ -1038,6 +1286,7 @@
       });
 
       initializeChart(); // Dibuja el gráfico vacío al inicio (crea contenedores y arranca spinScale)
+      updateLayoutMode(); // Aplica las clases iniciales basadas en el layout mode (ej. "split")
       setInterval(fetchData, 300); // Actualiza datos del gráfico y pulso del beat
       fetchData(); // Llama inmediatamente al cargar
     </script>
