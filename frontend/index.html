@@ -229,6 +229,13 @@
       #settings-icon:hover {
         transform: rotate(90deg);
       }
+      #bt-toggle-icon {
+        stroke: #808080; /* Gray when off */
+      }
+      #bt-toggle-icon.active {
+        stroke: var(--primary-color);
+        filter: drop-shadow(0 0 5px var(--primary-color));
+      }
 
       body.maximized #controls {
         display: none;
@@ -293,6 +300,42 @@
         margin-bottom: 15px;
         color: var(--primary-color);
       }
+      
+      /* --- ¡NUEVO! BT Info Modal --- */
+      #bt-info-modal {
+        display: none;
+        position: absolute;
+        top: 60px;
+        right: 15%;
+        background-color: var(--card-bg-color);
+        border: 1px solid var(--primary-color);
+        border-radius: 8px;
+        padding: 20px;
+        z-index: 100;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+        color: var(--text-color);
+        text-align: center;
+        width: 300px;
+      }
+      #bt-cover-art {
+        width: 250px;
+        height: 250px;
+        object-fit: cover;
+        border-radius: 5px;
+        margin-bottom: 15px;
+        border: 1px solid #444;
+        background-color: #111;
+      }
+      #bt-title {
+        font-weight: bold;
+        font-size: 1.2em;
+        margin-bottom: 5px;
+      }
+      #bt-artist {
+        font-size: 1em;
+        color: #aaa;
+      }
+
       .radio-group {
         margin-bottom: 10px;
       }
@@ -312,6 +355,41 @@
     <div id="controls">
       <h1 style="font-family: Irish Grover; margin: 0">Mixxx DJ Buddy</h1>
       <div>
+        <!-- Image / Cover Art Icon -->
+        <svg
+          id="bt-info-icon"
+          class="icon-btn"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          title="Show E-Reader View"
+        >
+          <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+          <circle cx="8.5" cy="8.5" r="1.5"></circle>
+          <polyline points="21 15 16 10 5 21"></polyline>
+        </svg>
+
+        <!-- Broadcast / BT Toggle Icon -->
+        <svg
+          id="bt-toggle-icon"
+          class="icon-btn"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          title="Toggle Bluetooth Broadcast"
+        >
+          <path d="M5 12.55a11 11 0 0 1 14.08 0"></path>
+          <path d="M1.42 9a16 16 0 0 1 21.16 0"></path>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+          <line x1="12" y1="20" x2="12.01" y2="20"></line>
+        </svg>
+
         <svg
           id="maximize-icon"
           class="icon-btn"
@@ -343,6 +421,14 @@
           ></path>
         </svg>
       </div>
+    </div>
+
+    <!-- BT Info Modal -->
+    <div id="bt-info-modal">
+      <div class="modal-header">E-Reader Display Preview</div>
+      <img id="bt-cover-art" src="" alt="Cover Art" />
+      <div id="bt-title">Waiting...</div>
+      <div id="bt-artist">--</div>
     </div>
 
     <!-- Settings Modal -->
@@ -539,6 +625,57 @@
       const settingsIcon = document.getElementById("settings-icon");
       const settingsModal = document.getElementById("settings-modal");
       const maximizeIcon = document.getElementById("maximize-icon");
+      const btToggleIcon = document.getElementById("bt-toggle-icon");
+      const btInfoIcon = document.getElementById("bt-info-icon");
+      const btInfoModal = document.getElementById("bt-info-modal");
+
+      let btServerActive = false;
+      let btPollingInterval = null;
+
+      // Toggle BT Server
+      btToggleIcon.addEventListener("click", function () {
+        btServerActive = !btServerActive;
+        if (btServerActive) {
+          btToggleIcon.classList.add("active");
+          if (typeof toggleBTServer === "function") toggleBTServer(true);
+        } else {
+          btToggleIcon.classList.remove("active");
+          if (typeof toggleBTServer === "function") toggleBTServer(false);
+        }
+        saveSettings();
+      });
+
+      // Show/Hide BT Info Modal
+      btInfoIcon.addEventListener("click", function (event) {
+        event.stopPropagation();
+        if (btInfoModal.style.display === "block") {
+          btInfoModal.style.display = "none";
+          clearInterval(btPollingInterval);
+        } else {
+          btInfoModal.style.display = "block";
+          settingsModal.style.display = "none"; // close settings if open
+          fetchBTCurrent(); // fetch immediately
+          btPollingInterval = setInterval(fetchBTCurrent, 2000);
+        }
+      });
+
+      function fetchBTCurrent() {
+        fetch("/api/current")
+          .then(res => res.json())
+          .then(data => {
+            if (data.title) {
+              document.getElementById("bt-title").innerText = data.title;
+              document.getElementById("bt-artist").innerText = data.artist || "Unknown Artist";
+              if (data.has_art) {
+                // To bypass cache on the image
+                document.getElementById("bt-cover-art").src = "/api/coverart?t=" + new Date().getTime();
+              } else {
+                document.getElementById("bt-cover-art").src = "";
+              }
+            }
+          })
+          .catch(e => console.warn("Failed to fetch BT current track", e));
+      }
 
       maximizeIcon.addEventListener("click", function (event) {
         document.body.classList.add("maximized");
@@ -588,6 +725,15 @@
             settingsModal.style.display = "none";
           }
         }
+        if (btInfoModal.style.display === "block") {
+          if (
+            !btInfoModal.contains(event.target) &&
+            event.target !== btInfoIcon
+          ) {
+            btInfoModal.style.display = "none";
+            clearInterval(btPollingInterval);
+          }
+        }
         // Unpin tooltip if clicking outside a dot
         if (tooltipPinned && !event.target.closest(".dot")) {
           tooltipPinned = false;
@@ -607,6 +753,7 @@
           jazzyTheme: document.body.classList.contains("theme-jazzy"),
           alwaysOnTop: document.getElementById("alwaysOnTopToggle").checked,
           maximized: document.body.classList.contains("maximized"),
+          btServerActive: btServerActive,
         };
         localStorage.setItem("mixxxBuddySettings", JSON.stringify(settings));
       }
@@ -670,6 +817,14 @@
           // Maximized
           if (s.maximized) {
             document.body.classList.add("maximized");
+          }
+          // BT Server
+          if (s.btServerActive) {
+            btServerActive = true;
+            btToggleIcon.classList.add("active");
+            if (typeof toggleBTServer === "function") {
+              setTimeout(() => toggleBTServer(true), 1000); // delay to ensure Go binding is ready
+            }
           }
         } catch (e) {
           console.warn("Failed to load settings:", e);

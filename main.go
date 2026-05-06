@@ -69,6 +69,8 @@ func main() {
 	}
 	http.Handle("/", http.FileServer(http.FS(subFS)))
 	http.HandleFunc("/api/data", serveData)
+	http.HandleFunc("/api/current", serveCurrentBTTrack)
+	http.HandleFunc("/api/coverart", serveCoverArt)
 	go func() {
 		log.Println("Iniciando servidor web interno en http://localhost:8080...")
 		if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -140,8 +142,18 @@ func main() {
 			windowHwnd,
 			uintptr(flag),
 			0, 0, 0, 0,
-			uintptr(0x0002|0x0001), // SWP_NOMOVE | SWP_NOSIZE
 		)
+	})
+
+	// Bind JS-callable function: toggleBTServer(bool)
+	w.Bind("toggleBTServer", func(enabled bool) {
+		if enabled {
+			log.Println("Frontend requested BT Server START")
+			StartBTServer()
+		} else {
+			log.Println("Frontend requested BT Server STOP")
+			StopBTServer()
+		}
 	})
 
 	w.Navigate("http://localhost:8080")
@@ -172,9 +184,11 @@ func pollMixxxDB(db *sql.DB) {
 			       AND P2.name NOT GLOB '????-??-?? (*'
 			       AND P2.name NOT GLOB '????-??-?? #*'
 			       AND P2.hidden = 0), ''
-			  ) AS playlists
+			  ) AS playlists,
+			  tl.location AS filepath
 			FROM library T
 			JOIN PlaylistTracks PT ON T.id = PT.track_id
+			JOIN track_locations tl ON T.location = tl.id
 			WHERE PT.playlist_id = (
 				SELECT P.id
 				FROM Playlists P
@@ -193,6 +207,9 @@ func pollMixxxDB(db *sql.DB) {
 		}
 
 		var currentTracks []TrackData
+		var latestArtist, latestTitle, latestFilepath string
+		var latestBpm float64
+
 		for rows.Next() {
 			rowsScanned++
 			var bpm float64
@@ -201,7 +218,8 @@ func pollMixxxDB(db *sql.DB) {
 			var duration sql.NullFloat64
 			var crates sql.NullString
 			var playlists sql.NullString
-			if err := rows.Scan(&bpm, &artist, &title, &duration, &crates, &playlists); err != nil {
+			var filepath sql.NullString
+			if err := rows.Scan(&bpm, &artist, &title, &duration, &crates, &playlists, &filepath); err != nil {
 				log.Printf("Error scanning row: %v", err)
 				continue
 			}
@@ -227,6 +245,15 @@ func pollMixxxDB(db *sql.DB) {
 				if playlists.Valid {
 					pls = playlists.String
 				}
+				
+				// Keep track of the latest track for the BT server
+				latestArtist = art
+				latestTitle = tit
+				latestBpm = bpm
+				if filepath.Valid {
+					latestFilepath = filepath.String
+				}
+
 				currentTracks = append(currentTracks, TrackData{
 					BPM:       bpm,
 					Artist:    art,
@@ -241,6 +268,8 @@ func pollMixxxDB(db *sql.DB) {
 
 		if len(currentTracks) > 0 {
 			log.Printf("Datos actualizados. %d tracks encontrados con BPM > 0.", len(currentTracks))
+			// Notify BT server of the latest playing track
+			SetCurrentBTTrack(latestArtist, latestTitle, latestBpm, latestFilepath)
 		} else if rowsScanned > 0 {
 			log.Println("Tracks encontrados, pero todos tienen 0 BPM. Esperando a que Mixxx los analice.")
 		} else {
