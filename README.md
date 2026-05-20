@@ -10,6 +10,8 @@ A lightweight, always-on-top desktop overlay for DJs using [Mixxx](https://mixxx
 - **Track History List:** Scrollable list of all tracks played in the current session.
 - **Always on Top:** Stays over your DJ software. Togglable in settings.
 - **Bluetooth E-Reader Broadcast:** An integrated Bluetooth RFCOMM server that sends cover art and track metadata wirelessly to connected Android devices (e.g., a rooted Likebook e-reader).
+- **Adjustable BT Resolution:** Choose between 600px, 800px, or 1000px streaming resolution in settings to balance speed and quality on your e-ink device.
+- **Robust Session Detection:** Automatically detects the latest Mixxx session (History playlists like `#2`, `#3`, etc.) and clears the screen between sets for a fresh start.
 - **Cover Art Preview:** Click the Image icon in the top bar to see exactly what's being sent to the e-reader in a floating "Now Playing" modal.
 - **Themes & Layout:** Dark mode by default, with a "Jazzy" light theme. Switch between split/chart/list layouts.
 - **Persistent Settings:** All toggles (theme, layout, BT server state, etc.) are saved in `localStorage`.

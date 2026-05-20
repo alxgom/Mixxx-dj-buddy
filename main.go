@@ -41,6 +41,7 @@ type AppState struct {
 }
 
 var appState AppState
+var lastPlaylistID int // Track session changes
 
 func main() {
 	if runtime.GOOS == "windows" {
@@ -147,6 +148,17 @@ func main() {
 		}
 	})
 
+	// Bind JS-callable function: setBTResolution(int)
+	w.Bind("setBTResolution", func(res int) {
+		log.Printf("Frontend requested BT Resolution: %dpx", res)
+		SetBTResolution(res)
+	})
+
+	// Bind JS-callable function: getBTInfo()
+	w.Bind("getBTInfo", func() BTInfo {
+		return GetBTInfo()
+	})
+
 	w.Navigate("http://localhost:8080")
 	w.Run()
 }
@@ -191,10 +203,9 @@ func pollMixxxDB() {
 			     FROM PlaylistTracks PT2
 			     JOIN Playlists P2 ON PT2.playlist_id = P2.id
 			     WHERE PT2.track_id = T.id
-			       AND P2.name NOT GLOB '????-??-??'
-			       AND P2.name NOT GLOB '????-??-?? (*'
-			       AND P2.name NOT GLOB '????-??-?? #*'
-			       AND P2.hidden = 0), ''
+			       AND P2.name NOT GLOB '20??-??-??*'
+			       AND P2.name NOT LIKE 'History%'
+			       AND P2.hidden IN (0, 2)), ''
 			  ) AS playlists,
 			  tl.location AS filepath
 			FROM library T
@@ -203,12 +214,13 @@ func pollMixxxDB() {
 			WHERE PT.playlist_id = (
 				SELECT P.id
 				FROM Playlists P
-				WHERE (P.name GLOB '????-??-??' OR P.name GLOB '????-??-?? (*)' OR P.name GLOB '????-??-?? #*')
-				ORDER BY P.date_created DESC
+				WHERE (P.name GLOB '20??-??-??*' OR P.name LIKE 'History%')
+				  AND P.hidden = 2
+				ORDER BY P.id DESC
 				LIMIT 1
 			)
 			ORDER BY
-			  PT."position" ASC;
+			  PT.id ASC;
 		`
 		rows, err := db.Query(query)
 		if err != nil {
@@ -223,6 +235,16 @@ func pollMixxxDB() {
 		var currentTracks []TrackData
 		var latestArtist, latestTitle, latestFilepath string
 		var latestBpm float64
+		// Get the current playlist ID for session transition detection
+		var currentPlaylistID int
+		err = db.QueryRow("SELECT P.id FROM Playlists P WHERE (P.name GLOB '20??-??-??*' OR P.name LIKE 'History%') AND P.hidden = 2 ORDER BY P.id DESC LIMIT 1").Scan(&currentPlaylistID)
+		if err == nil {
+			if lastPlaylistID != 0 && currentPlaylistID != lastPlaylistID {
+				log.Printf("Session change detected! (ID %d -> %d). Clearing state.", lastPlaylistID, currentPlaylistID)
+				SetCurrentBTTrack("", "", 0, "")
+			}
+			lastPlaylistID = currentPlaylistID
+		}
 
 		for rows.Next() {
 			rowsScanned++
@@ -295,7 +317,7 @@ func pollMixxxDB() {
 		appState.tracks = currentTracks
 		appState.mu.Unlock()
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 	}
 }
 

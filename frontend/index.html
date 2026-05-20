@@ -510,6 +510,12 @@
         </label>
       </div>
 
+      <div class="modal-header">Bluetooth Status</div>
+      <div id="bt-status-info" style="font-size: 0.8em; margin-bottom: 15px; color: #888;">
+        <div>Name: <span id="bt-name" style="color: var(--text-color)">--</span></div>
+        <div>Address: <span id="bt-address" style="color: var(--text-color)">--</span></div>
+      </div>
+
       <div class="radio-group">
         <div class="modal-header" style="font-size: 0.9em; margin-bottom: 8px">
           Tooltip Info
@@ -535,6 +541,15 @@
         <label><input type="radio" name="tooltipFontSize" value="small" /> Small</label>
         <label><input type="radio" name="tooltipFontSize" value="medium" checked /> Medium</label>
         <label><input type="radio" name="tooltipFontSize" value="large" /> Large</label>
+      </div>
+
+      <div class="radio-group" style="padding-top:10px; border-top: 1px solid var(--primary-color);">
+        <div class="modal-header" style="font-size: 0.9em; margin-bottom: 8px">
+          BT Stream Resolution
+        </div>
+        <label><input type="radio" name="btRes" value="600" checked /> 600px (Fast)</label>
+        <label><input type="radio" name="btRes" value="800" /> 800px (Medium)</label>
+        <label><input type="radio" name="btRes" value="1000" /> 1000px (Premium)</label>
       </div>
     </div>
 
@@ -712,6 +727,13 @@
           settingsModal.style.display = "none";
         } else {
           settingsModal.style.display = "block";
+          // Update BT info
+          if (typeof getBTInfo === "function") {
+            getBTInfo().then((info) => {
+              document.getElementById("bt-name").innerText = info.name || "Unknown";
+              document.getElementById("bt-address").innerText = info.address || "Unknown";
+            }).catch(e => console.warn("Failed to get BT info", e));
+          }
         }
       });
 
@@ -754,6 +776,7 @@
           alwaysOnTop: document.getElementById("alwaysOnTopToggle").checked,
           maximized: document.body.classList.contains("maximized"),
           btServerActive: btServerActive,
+          btRes: document.querySelector('input[name="btRes"]:checked')?.value || "600",
         };
         localStorage.setItem("mixxxBuddySettings", JSON.stringify(settings));
       }
@@ -824,6 +847,14 @@
             btToggleIcon.classList.add("active");
             if (typeof toggleBTServer === "function") {
               setTimeout(() => toggleBTServer(true), 1000); // delay to ensure Go binding is ready
+            }
+          }
+          // BT Resolution
+          if (s.btRes) {
+            const radio = document.querySelector(`input[name="btRes"][value="${s.btRes}"]`);
+            if (radio) {
+                radio.checked = true;
+                if (typeof setBTResolution === "function") setBTResolution(parseInt(s.btRes));
             }
           }
         } catch (e) {
@@ -947,6 +978,16 @@
         r.addEventListener("change", function () {
           tooltipFontSize = this.value;
           updateTooltipFont();
+          saveSettings();
+        });
+      });
+
+      // BT Resolution radio
+      document.querySelectorAll('input[name="btRes"]').forEach((r) => {
+        r.addEventListener("change", function () {
+          if (typeof setBTResolution === "function") {
+            setBTResolution(parseInt(this.value));
+          }
           saveSettings();
         });
       });

@@ -54,7 +54,14 @@ var (
 	
 	// Channels for managing the server lifecycle
 	btStopChan chan struct{}
+
+	// Configuration
+	btResolution int = 600
 )
+
+func SetBTResolution(res int) {
+	btResolution = res
+}
 
 // ── HTTP endpoints ────────────────────────────────────────────────────────────
 
@@ -86,6 +93,16 @@ func SetCurrentBTTrack(artist, title string, bpm float64, filePath string) {
 	currentArtist := btState.track.Artist
 	currentTitle := btState.track.Title
 	btState.mu.RUnlock()
+
+	// Clear state if artist/title are empty
+	if artist == "" && title == "" {
+		btState.mu.Lock()
+		btState.track = TrackInfo{}
+		btState.artData = nil
+		btState.artMime = ""
+		btState.mu.Unlock()
+		return
+	}
 
 	// Only update if it actually changed
 	if artist == currentArtist && title == currentTitle {
@@ -144,7 +161,7 @@ func prepareArtForBT(data []byte) []byte {
 		return nil
 	}
 	
-	dst := image.NewRGBA(image.Rect(0, 0, 600, 600))
+	dst := image.NewRGBA(image.Rect(0, 0, btResolution, btResolution))
 	draw.BiLinear.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Src, nil)
 	
 	var buf bytes.Buffer
@@ -401,7 +418,54 @@ type btFindRadioParams struct {
 	dwSize uint32
 }
 
+type BTInfo struct {
+	Name    string `json:"name"`
+	Address string `json:"address"`
+}
+
+func GetBTInfo() BTInfo {
+	bth := syscall.NewLazyDLL("bthprops.cpl")
+	findFirst := bth.NewProc("BluetoothFindFirstRadio")
+	getInfo   := bth.NewProc("BluetoothGetRadioInfo")
+	findClose := bth.NewProc("BluetoothFindRadioClose")
+
+	params := btFindRadioParams{dwSize: 4}
+	var radioHandle uintptr
+	findHandle, _, _ := findFirst.Call(
+		uintptr(unsafe.Pointer(&params)),
+		uintptr(unsafe.Pointer(&radioHandle)),
+	)
+	if findHandle == 0 {
+		return BTInfo{Name: "No Bluetooth Radio", Address: ""}
+	}
+	defer findClose.Call(findHandle)
+	defer syscall.CloseHandle(syscall.Handle(radioHandle))
+
+	var info btRadioInfo
+	info.dwSize = uint32(unsafe.Sizeof(info))
+	r, _, _ := getInfo.Call(radioHandle, uintptr(unsafe.Pointer(&info)))
+	if r != 0 {
+		return BTInfo{Name: "Unknown", Address: ""}
+	}
+	
+	name := syscall.UTF16ToString(info.szName[:])
+	addrHex := fmt.Sprintf("%012X", info.address)
+	formattedAddr := ""
+	for i := 0; i < 12; i += 2 {
+		formattedAddr += addrHex[i:i+2]
+		if i < 10 {
+			formattedAddr += ":"
+		}
+	}
+
+	return BTInfo{
+		Name:    name,
+		Address: formattedAddr,
+	}
+}
+
 func getLocalBTAddress() uint64 {
+	// Actually, let's just refactor to avoid duplication.
 	bth := syscall.NewLazyDLL("bthprops.cpl")
 	findFirst := bth.NewProc("BluetoothFindFirstRadio")
 	getInfo   := bth.NewProc("BluetoothGetRadioInfo")
@@ -419,13 +483,13 @@ func getLocalBTAddress() uint64 {
 	defer findClose.Call(findHandle)
 	defer syscall.CloseHandle(syscall.Handle(radioHandle))
 
-	var info btRadioInfo
-	info.dwSize = uint32(unsafe.Sizeof(info))
-	r, _, _ := getInfo.Call(radioHandle, uintptr(unsafe.Pointer(&info)))
+	var infoRaw btRadioInfo
+	infoRaw.dwSize = uint32(unsafe.Sizeof(infoRaw))
+	r, _, _ := getInfo.Call(radioHandle, uintptr(unsafe.Pointer(&infoRaw)))
 	if r != 0 {
 		return 0
 	}
-	return info.address
+	return infoRaw.address
 }
 
 func runBluetoothServer() {
@@ -494,7 +558,13 @@ func runBluetoothServer() {
 	}()
 
 	for {
-		client, _, _ := acceptProc.Call(sock, 0, 0)
+		var clientAddr sockaddrBTH
+		clientAddrLen := uint32(unsafe.Sizeof(clientAddr))
+		client, _, _ := acceptProc.Call(
+			sock,
+			uintptr(unsafe.Pointer(&clientAddr)),
+			uintptr(unsafe.Pointer(&clientAddrLen)),
+		)
 		if client == invalidSocket {
 			// Check if we were told to stop
 			btState.mu.RLock()
@@ -506,7 +576,18 @@ func runBluetoothServer() {
 			time.Sleep(time.Second)
 			continue
 		}
-		log.Println("BT: Client connected!")
+		
+		addrHex := fmt.Sprintf("%012X", binary.LittleEndian.Uint64(clientAddr.btAddrBytes[:]))
+		// Format as XX:XX:XX:XX:XX:XX
+		formattedAddr := ""
+		for i := 0; i < 12; i += 2 {
+			formattedAddr += addrHex[i:i+2]
+			if i < 10 {
+				formattedAddr += ":"
+			}
+		}
+
+		log.Printf("BT: Client connected! Address: %s", formattedAddr)
 		go handleBTClient(client, dll)
 	}
 }
