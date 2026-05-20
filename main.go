@@ -43,25 +43,16 @@ type AppState struct {
 var appState AppState
 
 func main() {
+	if runtime.GOOS == "windows" {
+		hideConsole()
+	}
 	log.Println("Iniciando analizador de historial de Mixxx...")
 
-	// --- PASO 1: Encontrar y conectar a la BD ---
-	dbPath, err := getMixxxDBPath()
-	if err != nil {
-		log.Fatalf("Error fatal: No se pudo encontrar la base de datos de Mixxx: %v", err)
-	}
-	log.Printf("Base de datos encontrada en: %s", dbPath)
+	// --- PASO 1: Iniciar el sondeo de la BD (en segundo plano) ---
+	// El poller ahora es responsable de encontrar y conectar a la BD
+	go pollMixxxDB()
 
-	db, err := sql.Open("sqlite", dbPath+"?mode=ro")
-	if err != nil {
-		log.Fatalf("Error al abrir la base de datos: %v", err)
-	}
-	defer db.Close()
-
-	// --- PASO 2: Iniciar el sondeo de la BD (en segundo plano) ---
-	go pollMixxxDB(db)
-
-	// --- PASO 3: Iniciar el servidor web (en segundo plano) ---
+	// --- PASO 2: Iniciar el servidor web (en segundo plano) ---
 	// La ventana webview necesita un servidor web al que apuntar
 	subFS, err := fs.Sub(frontendFS, "frontend")
 	if err != nil {
@@ -82,7 +73,7 @@ func main() {
 	time.Sleep(1 * time.Second)
 
 	// --- PASO 4: Crear la Ventana Nativa Webview ---
-	debug := true // Ponlo en 'true' para depurar
+	debug := false // Desactivado para evitar que abra consola de depuración
 	w := webview.New(debug)
 	if w == nil {
 		log.Fatal("Falló al crear la ventana webview")
@@ -160,9 +151,29 @@ func main() {
 	w.Run()
 }
 
-// pollMixxxDB consulta la BD cada 5 segundos
-func pollMixxxDB(db *sql.DB) {
+// pollMixxxDB consulta la BD de forma recurrente y maneja la reconexión
+func pollMixxxDB() {
+	var db *sql.DB
+
 	for {
+		if db == nil {
+			dbPath, err := getMixxxDBPath()
+			if err != nil {
+				log.Println("Buscando base de datos de Mixxx...")
+				time.Sleep(5 * time.Second)
+				continue
+			}
+
+			log.Printf("Base de datos encontrada en: %s. Conectando...", dbPath)
+			db, err = sql.Open("sqlite", dbPath+"?mode=ro")
+			if err != nil {
+				log.Printf("Error al abrir la base de datos: %v", err)
+				db = nil
+				time.Sleep(5 * time.Second)
+				continue
+			}
+		}
+
 		rowsScanned := 0
 
 		// Esta consulta busca la playlist más reciente por fecha Y que tenga formato de fecha
@@ -201,7 +212,10 @@ func pollMixxxDB(db *sql.DB) {
 		`
 		rows, err := db.Query(query)
 		if err != nil {
-			log.Printf("Error al consultar la BD: %v", err)
+			log.Printf("Error al consultar la BD (posiblemente aún no inicializada): %v", err)
+			// No matamos el proceso, cerramos la conexión y reintentamos luego
+			db.Close()
+			db = nil
 			time.Sleep(5 * time.Second)
 			continue
 		}
@@ -327,4 +341,9 @@ func getMixxxDBPath() (string, error) {
 	}
 
 	return "", fmt.Errorf("no se encontró mixxxdb.sqlite en las rutas estándar")
+}
+
+// hideConsole detalla el proceso de la consola en Windows
+func hideConsole() {
+	syscall.NewLazyDLL("kernel32.dll").NewProc("FreeConsole").Call()
 }

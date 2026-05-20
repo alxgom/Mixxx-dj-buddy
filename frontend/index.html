@@ -598,7 +598,7 @@
         <div id="track-list-content"></div>
       </div>
     </div>
-    <p id="status">Connecting to server...</p>
+    <p id="status">Waiting for Mixxx data...</p>
     <div id="tooltip"></div>
     <div id="unmaximize-btn">
       <svg
@@ -1407,7 +1407,7 @@
         const listDiv = document.getElementById("track-list-content");
         if (!listDiv) return;
         if (!data || data.length === 0) {
-          listDiv.innerHTML = "<div style='opacity:0.5; padding:10px;'>No tracks played yet...</div>";
+          listDiv.innerHTML = "<div style='opacity:0.5; padding:20px; text-align:center;'>No tracks detected in the current session.<br/><br/>Start playing in Mixxx!</div>";
           return;
         }
         

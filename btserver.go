@@ -148,7 +148,7 @@ func prepareArtForBT(data []byte) []byte {
 	draw.BiLinear.Scale(dst, dst.Bounds(), img, img.Bounds(), draw.Src, nil)
 	
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 80}); err != nil {
+	if err := jpeg.Encode(&buf, dst, &jpeg.Options{Quality: 90}); err != nil {
 		log.Printf("resize: jpeg encode failed: %v", err)
 		return nil
 	}

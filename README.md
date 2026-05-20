@@ -1,65 +1,53 @@
 # Mixxx DJ Buddy
 
-Mixxx DJ Buddy is a live analysis companion application for [Mixxx](https://mixxx.org/), designed to help DJs keep track of their performance, analyze the history of tracks played, and provide valuable visual references during sets.
+A lightweight, always-on-top desktop overlay for DJs using [Mixxx](https://mixxx.org/). It reads the Mixxx SQLite database in real-time to display a live BPM chart, track history, and — with the integrated Bluetooth server — streams cover art and metadata directly to a wireless e-ink display.
+
+![Mixxx DJ Buddy Icon](icon.png)
 
 ## Features
 
-- **Live DJ Sets Analysis:** Automatically monitors the tracks you play by reading directly from your Mixxx database.
-- **Always on Top:** Can be pinned on top of your mixing software so you never lose the visual reference.
-- **Customizable UI & Themes:** Supports themes (like Jazzy Light) and toggleable UI features directly from the settings menu.
-- **Dynamic Chart Generation:** Visualizes BPM trends and track metadata across your DJ set as you play.
-- **Interactive Tooltips:** Hover over or click data points to see which songs were played. The tooltips show which **crates** and **playlists** each song belongs to, and dynamically highlight any crates the song shares with the previously played track to help you understand your mixing flow.
+- **Live BPM Chart:** Real-time D3.js visualization of BPM across your set, rendered inside a native WebView window.
+- **Track History List:** Scrollable list of all tracks played in the current session.
+- **Always on Top:** Stays over your DJ software. Togglable in settings.
+- **Bluetooth E-Reader Broadcast:** An integrated Bluetooth RFCOMM server that sends cover art and track metadata wirelessly to connected Android devices (e.g., a rooted Likebook e-reader).
+- **Cover Art Preview:** Click the Image icon in the top bar to see exactly what's being sent to the e-reader in a floating "Now Playing" modal.
+- **Themes & Layout:** Dark mode by default, with a "Jazzy" light theme. Switch between split/chart/list layouts.
+- **Persistent Settings:** All toggles (theme, layout, BT server state, etc.) are saved in `localStorage`.
 
-## Screenshots
+## Window Icon
 
-### Main Interface
+The app window uses a custom vinyl record SVG icon embedded directly into the `.exe` via `go-winres`.
 
-![Main Interface](./screenshots/screenshot_1.png)
+## Build
 
-### Settings Menu
+```powershell
+cd "c:\DEV\Mixxx dj buddy"
 
-![Settings Menu](./screenshots/settings_options_screenshot.png)
+# Generate Windows resources (icon embedded into .exe)
+go-winres make
 
-## Demo
-
-Watch a short screen recording demonstrating the app in action:
-
-
-
-https://github.com/user-attachments/assets/45010f16-e5cc-4e6b-9637-f2c487d610d4
-
-
-
-## Getting Started
-
-### Prerequisites
-
-- Go 1.21–1.24 (Go 1.25+ is not yet supported due to pre-built CGO wheel availability for `webview_go`)
-- [Mixxx](https://mixxx.org/) installed and running on your system (the app automatically locates the default `mixxxdb.sqlite` location based on your OS)
-
-### Installation & Build
-
-Clone the repository and build the executable:
-
-```bash
-git clone <repository_url>
-cd mixxx-dj-buddy
-go mod tidy
-go build -ldflags="-H windowsgui" -o mixxx-dj-buddy.exe
+# Build the final executable
+go build -ldflags="-H windowsgui" -o mixxx-dj-buddy.exe .
 ```
 
-### Usage
+## Run (Development)
 
-Run the built executable:
-
-```bash
-./mixxx-dj-buddy.exe
+```powershell
+go run .
 ```
 
-A window will pop up showing the Live Analysis. The app connects to the `mixxxdb.sqlite` to read the ongoing playlist history, automatically updating the chart when you change or play new tracks.
+## Bluetooth E-Reader Setup
 
-Click on the settings icon on the top right to customize your experience, pin the window, or change the visual theme.
+1. Toggle the **broadcast icon** (Wi-Fi waves) in the top-right of the UI to start the Bluetooth RFCOMM server on Channel 4.
+2. The icon lights up in the theme color when the server is active. Your state is saved — if you leave it on, it will auto-start on the next launch.
+3. The **image icon** opens a preview modal showing the current track's cover art, artist, and title — exactly what the e-reader will display.
 
-## Future Plans
+## Dependencies
 
-- **Advanced Audio Features**: Moving away from using BPM as the primary metric, future versions will incorporate metrics that serve as better proxies for the perceived energy and musical qualities of the tracks. This will provide a more detailed and accurate visualization of the set's flow and dynamic range.
+| Package | Purpose |
+|---|---|
+| `github.com/webview/webview_go` | Native desktop WebView window |
+| `modernc.org/sqlite` | Pure-Go SQLite driver (no CGo needed for DB) |
+| `github.com/dhowden/tag` | Audio tag / cover art extraction |
+| `golang.org/x/image/draw` | High-quality image resizing for Bluetooth transfer |
+| `github.com/srwiley/oksvg` + `rasterx` | SVG rendering for icon generation |
